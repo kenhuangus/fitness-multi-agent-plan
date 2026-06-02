@@ -1,0 +1,194 @@
+[
+  {
+    "id": "01",
+    "name": "title",
+    "kind": "title",
+    "title": "Fitness Coaching Multi-Agent",
+    "subtitle": "A LangGraph hub that routes to three specialized sub-agents",
+    "narration": "A fitness coaching multi agent system, built on LangGraph. A hub agent routes every user message to one of three specialized sub agents — a coach, a workout generator, and a workout logger — using L L M structured output. Let's walk through the architecture and how every requirement is implemented."
+  },
+  {
+    "id": "02",
+    "name": "architecture",
+    "kind": "architecture",
+    "title": "Architecture overview",
+    "narration": "At a high level: the router classifies intent into one of four routes, then a single conditional edge dispatches to the matching sub agent. Each sub agent is its own independently compiled graph, composed into the hub as a node. A memory saver checkpointer, keyed by thread, gives the whole system multi turn memory. Now the details, requirement by requirement."
+  },
+  {
+    "id": "03",
+    "name": "arch-state",
+    "kind": "code",
+    "req": "Requirement 1",
+    "title": "Typed StateGraph with explicit edges",
+    "subtitle": "state.py + hub.py — typed state, START edge, conditional dispatch edge",
+    "code": "# state.py — typed hub state (messages reducer = memory)\nclass HubState(TypedDict, total=False):\n    messages: Annotated[list, add_messages]\n    user_input: str\n    decision: Optional[RouterDecision]\n    response: str\n\n# hub.py — StateGraph with explicit, typed edges\ng = StateGraph(HubState)\ng.add_node(\"router\", _router_node)\ng.add_edge(START, \"router\")\ng.add_conditional_edges(\"router\", _select_route, {\n    \"COACH\": \"COACH\", \"WORKOUT_GENERATE\": \"WORKOUT_GENERATE\",\n    \"WORKOUT_LOG\": \"WORKOUT_LOG\", \"CLARIFY\": \"CLARIFY\"})",
+    "narration": "Requirement one: the hub is a LangGraph state graph with typed state and explicit edges. The state is a typed dict — messages, the user input, the router decision, and the response. The messages field uses the add messages reducer, which is what accumulates conversation history across turns. The graph adds the router node, an edge from start, and a conditional edge that dispatches on the chosen route."
+  },
+  {
+    "id": "04",
+    "name": "arch-subgraphs",
+    "kind": "code",
+    "req": "Requirement 2",
+    "title": "Sub-agents are separate compiled graphs",
+    "subtitle": "Each sub-agent is its own StateGraph, composed into the hub as a node",
+    "code": "# agents/coach.py — an independently compiled graph\ndef build_coach():\n    g = StateGraph(HubState)\n    g.add_node(\"coach\", _coach_node)\n    g.add_edge(START, \"coach\"); g.add_edge(\"coach\", END)\n    return g.compile()\n\n# hub.py — compose the compiled graphs as NODES (not inlined fns)\ncoach     = build_coach()\ngenerator = build_generator()\nlogger    = build_logger()\ng.add_node(\"COACH\", coach)\ng.add_node(\"WORKOUT_GENERATE\", generator)\ng.add_node(\"WORKOUT_LOG\", logger)",
+    "narration": "Requirement two: sub agents must be separate graphs composed into the hub, not inlined functions. Each one — coach, generator, and logger — is built and compiled as its own state graph. The hub then adds each compiled graph as a node. They genuinely compose as nested graphs; they don't collapse into helper functions."
+  },
+  {
+    "id": "05",
+    "name": "arch-tools",
+    "kind": "code",
+    "req": "Requirement 3",
+    "title": "Tools with documented Pydantic schemas",
+    "subtitle": "schemas.py + tools.py — a description on every field; tool-calling ReAct agent",
+    "code": "# schemas.py — every field has a description\nclass SearchExercisesInput(BaseModel):\n    muscle_groups: Optional[list[str]] = Field(default=None,\n        description=\"Target muscle groups, e.g. ['chest','triceps'].\")\n    exclude_joints: Optional[list[str]] = Field(default=None,\n        description=\"Injured joints to avoid (injury avoidance).\")\n\n# tools.py — bound to the schema, used by the generator agent\n@tool(args_schema=SearchExercisesInput)\ndef search_exercises(muscle_groups=None, equipment=None,\n                     exclude_joints=None, limit=10): ...\n\n_react_agent = create_react_agent(get_agent_llm(),\n                                  [search_exercises, build_workout])",
+    "narration": "Requirement three: tools expose Pydantic input schemas with a description on every field. The generator is a tool calling React agent with two tools — search exercises and build workout. Each field is documented — including exclude joints, which drives injury avoidance — so the model knows exactly how to call them."
+  },
+  {
+    "id": "06",
+    "name": "arch-router",
+    "kind": "code",
+    "req": "Requirement 4",
+    "title": "Structured-output routing + low-confidence guard",
+    "subtitle": "router.py — with_structured_output, no regex; confidence < 0.6 → CLARIFY",
+    "code": "# router.py — LLM structured output (NOT regex / keywords)\nllm = get_router_llm().with_structured_output(RouterDecision)\ndecision = llm.invoke(messages)   # -> {route, confidence, reasoning}\n\n# explicit low-confidence policy: never silently misroute\nif decision.route != \"CLARIFY\" and \\\n   decision.confidence < CONFIDENCE_THRESHOLD:   # default 0.6\n    return RouterDecision(route=\"CLARIFY\",\n                          confidence=decision.confidence,\n                          reasoning=f\"Low confidence: {decision.reasoning}\")\n\n# any structured-output error also falls back to CLARIFY",
+    "narration": "Requirement four: routing uses L L M structured output — with structured output on a Pydantic router decision — never regex or keyword matching. The decision carries a confidence score. The explicit guard downgrades anything below zero point six confidence to clarify, and any error in the structured call also falls back to clarify. The system never silently misroutes."
+  },
+  {
+    "id": "07",
+    "name": "arch-logger",
+    "kind": "code",
+    "req": "Workout Logger",
+    "title": "Logger — parse, then fuzzy-match",
+    "subtitle": "agents/logger.py — a two-node graph: structured parse → deterministic match",
+    "code": "# Node 1: structured output parses the numbers from free text\nparsed = llm.with_structured_output(ParsedLog).invoke(...)\n#   -> exercise_name_raw, sets, reps, weight, unit\n\n# Node 2: deterministic fuzzy match against the dataset\nbest, score = data.find_fuzzy(parsed.exercise_name_raw)[0]  # rapidfuzz WRatio\nif score >= FUZZY_THRESHOLD:        # 70\n    entry.matched_exercise_id = best[\"id\"]\nelse:\n    entry.candidates = [name for name, _ in matches]  # suggest, don't fake\nreturn {\"response\": ..., \"log_entry\": entry.model_dump()}",
+    "narration": "The workout logger is a two node graph. The first node uses structured output to parse sets, reps, weight, and unit from conversational text. The second node is deterministic: rapid fuzz maps the user's phrasing to a real exercise in the dataset. Above threshold it records the match; below it, it returns candidate suggestions instead of forcing a hallucinated match — and always returns structured Jason."
+  },
+  {
+    "id": "08",
+    "name": "arch-resilience",
+    "kind": "code",
+    "req": "Resilience",
+    "title": "Graceful degradation in the tools",
+    "subtitle": "tools.py — empty search & invalid IDs return structured payloads, never raise",
+    "code": "# empty search -> recoverable payload, NOT an exception\nif not results:\n    return {\"results\": [],\n            \"message\": \"No exercises match. Tell the user — \"\n                       \"do not invent exercises.\"}\n\n# invalid exercise id -> collected, not raised\nfor ex_id in exercise_ids:\n    ex = data.get(ex_id)\n    if ex is None:\n        errors.append(ex_id)        # reported back to the agent\n        continue\n    main.append(_item(ex))\n# generator node also wraps the whole turn in try/except",
+    "narration": "Resilience is built into the tools themselves. An empty search returns a structured no matches payload that tells the agent to report the gap and not invent exercises. An invalid exercise I D is collected into an errors list rather than raising. And the generator wraps the whole turn in a try except. The agent recovers gracefully; it never crashes or hallucinates."
+  },
+  {
+    "id": "09",
+    "name": "cli",
+    "kind": "screen",
+    "title": "Command-line demo — streaming + routing",
+    "image": "media/screens/00-cli-demo.png",
+    "caption": "Each message routed by the LLM: COACH, WORKOUT_GENERATE, WORKOUT_LOG, or CLARIFY.",
+    "narration": "Here's the implementation running in the command line interface, with streaming responses and Langfuse tracing enabled. Watch the router: a muscle question routes to coach, a workout request to workout generate with tool calls, a completed set to workout log, and a bare bench press to clarify."
+  },
+  {
+    "id": "10",
+    "name": "web-coach",
+    "kind": "screen",
+    "title": "Web view — the Coach agent",
+    "image": "media/screens/02-web-coach.png",
+    "caption": "routed → COACH",
+    "narration": "The same system in a Streamlit web view. A coach question — what muscles does a deadlift work — is routed to the coach agent, which answers with primary movers, stabilizers, and form cues."
+  },
+  {
+    "id": "11",
+    "name": "web-generate",
+    "kind": "screen",
+    "title": "The Workout Generator in action",
+    "image": "media/screens/03-web-generate.png",
+    "caption": "routed → WORKOUT_GENERATE · search_exercises → build_workout",
+    "narration": "A request to build a twenty minute upper body dumbbell workout routes to the generator. The tool calling agent calls search exercises to find candidates in the dataset, then build workout to assemble a structured warmup, main block, and cooldown, with sets, reps, and rest."
+  },
+  {
+    "id": "12",
+    "name": "web-log",
+    "kind": "screen",
+    "title": "The Workout Logger in action",
+    "image": "media/screens/04-web-log.png",
+    "caption": "routed → WORKOUT_LOG · fuzzy match → structured JSON",
+    "narration": "A natural language log — three by ten bench press at one eighty five — routes to the logger. It parses sets, reps, weight, and unit, fuzzy matches bench press to the real exercise, and returns the structured Jason entry you saw in the code."
+  },
+  {
+    "id": "13",
+    "name": "web-clarify",
+    "kind": "screen",
+    "title": "The low-confidence guard, live",
+    "image": "media/screens/05-web-clarify.png",
+    "caption": "routed → CLARIFY",
+    "narration": "And the guard in action: a bare bench press is genuinely ambiguous, so confidence falls below threshold and the router routes to clarify, asking what the user meant instead of guessing."
+  },
+  {
+    "id": "14",
+    "name": "memory",
+    "kind": "screen",
+    "title": "Injury avoidance + multi-turn memory",
+    "image": "media/screens/07-web-memory.png",
+    "caption": "Follow-up turn remembers the shoulder injury → shoulder-safe leg workout",
+    "narration": "Two stretch features in one exchange. First, an injured shoulder request: the generator passes exclude joints and drops every exercise that loads the shoulder. Then a follow up — make it twenty five minutes and focus on legs — and the checkpointer remembers the shoulder constraint, producing a shoulder safe leg workout. Multi turn memory and injury avoidance, together."
+  },
+  {
+    "id": "15",
+    "name": "langfuse-traces",
+    "kind": "screen",
+    "title": "Observability — local self-hosted Langfuse",
+    "image": "media/screens/08-langfuse-traces.png",
+    "caption": "Every turn traced, grouped by thread_id",
+    "narration": "Observability runs on a local, self hosted Langfuse — a full six service stack in Docker. Every turn is traced. Here's the trace list, each user message captured with its inputs and outputs."
+  },
+  {
+    "id": "16",
+    "name": "langfuse-detail",
+    "kind": "screen",
+    "title": "A single trace — the full call tree",
+    "image": "media/screens/09-langfuse-trace-detail.png",
+    "caption": "Router decision → sub-agent → every tool call, with I/O",
+    "narration": "Opening a single trace shows the full call tree: the router decision with its confidence, the dispatched sub agent, and every tool call with inputs and outputs. This is exactly the event stream you'd monitor in production."
+  },
+  {
+    "id": "17",
+    "name": "reqmap",
+    "kind": "reqmap",
+    "title": "Every requirement → its implementation",
+    "rows": [
+      ["1 · Typed StateGraph hub", "<code>hub.py</code> + <code>state.py</code> — <code>HubState</code> TypedDict, <code>add_conditional_edges</code>"],
+      ["2 · Sub-agents = separate graphs", "<code>agents/*.py</code> each <code>.compile()</code>, added via <code>add_node</code>"],
+      ["3 · Pydantic tool schemas", "<code>schemas.py</code> — <code>Field(description=...)</code> on every field"],
+      ["4 · Structured-output routing", "<code>router.py</code> — <code>with_structured_output</code> + 0.6 confidence guard"],
+      ["5 · search + build tools", "<code>tools.py</code> — <code>@tool</code>, ReAct agent in <code>generator.py</code>"],
+      ["6 · Parse + fuzzy logger", "<code>logger.py</code> — structured parse → <code>rapidfuzz</code> match"],
+      ["7 · Resilience", "empty search & bad IDs → structured payloads; <code>try/except</code>"],
+      ["Tests", "<code>tests/</code> — 13 passing: routing · resilience · stretch"]
+    ],
+    "narration": "To recap how every requirement maps to code: the typed state graph hub in hub dot pie and state dot pie; sub agents as separate compiled graphs; Pydantic tool schemas with documented fields; structured output routing with the confidence guard; the search and build tools driving a React agent; the parse and fuzzy logger; and graceful resilience in the tools. All of it backed by thirteen passing tests across routing, resilience, and the stretch features."
+  },
+  {
+    "id": "18",
+    "name": "decisions",
+    "kind": "bullets",
+    "title": "Key design decisions",
+    "bullets": [
+      "Low-confidence guard: routing < 0.6 → CLARIFY, so the system asks rather than misroutes",
+      "Resilient tools: empty searches & invalid IDs return structured payloads, never exceptions",
+      "The agent recovers gracefully and never hallucinates exercises",
+      "Loose dataset matching + rapidfuzz WRatio for colloquial exercise names",
+      "Observability built in: structured JSON logs + Langfuse tracing, zero-config to enable"
+    ],
+    "narration": "Two decisions worth emphasizing. The low confidence guard means the system asks rather than misroutes. And resilient tools mean empty searches and invalid I Ds return structured payloads, never exceptions — so the agent recovers and never hallucinates exercises."
+  },
+  {
+    "id": "19",
+    "name": "closing",
+    "kind": "bullets",
+    "title": "All five stretch goals — implemented",
+    "bullets": [
+      "Streaming responses",
+      "Multi-turn conversation memory (MemorySaver checkpointer)",
+      "Injury avoidance via joints_loaded",
+      "Bilateral exercise pairing via bilateral_pair_id",
+      "Observability with local self-hosted Langfuse"
+    ],
+    "narration": "And all five stretch goals are implemented too — streaming, multi turn memory, injury avoidance, bilateral pairing, and observability. A small system that works end to end, correctly, with production grade tracing. Thanks for watching."
+  }
+]

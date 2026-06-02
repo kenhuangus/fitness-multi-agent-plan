@@ -1,0 +1,16 @@
+.env
+ops/.env
+ops/streamlit.log
+ops/cli-trace.jsonl
+__pycache__/
+*.pyc
+.pytest_cache/
+trace.jsonl
+.venv/
+venv/
+
+# demo video build intermediates (keep demo/walkthrough.mp4 + demo/scenes.json)
+demo/.demo_build/
+demo/audio/
+demo/slides/
+media/cli_terminal.html
