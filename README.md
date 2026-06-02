@@ -114,6 +114,9 @@ goes to **stdout**. Redirect stderr to a file to keep the chat clean:
   (coach / generate / log / clarify), the injury + multi-turn-memory exchange, and the Langfuse
   trace list + trace detail.
 - **[`transcript.md`](transcript.md)** — a text proof-of-run of every route + stretch feature.
+- **[`skills/narrated-demo/`](skills/narrated-demo/)** — the reusable, self-contained skill that
+  produced the walkthrough: a `scenes.json` → styled slides + Deepgram TTS + ffmpeg montage
+  pipeline. Drop it into `~/.claude/skills/` or run its scripts directly on any project.
 
 ## Observability with local Langfuse (#12)
 

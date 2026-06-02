@@ -1,0 +1,80 @@
+[
+  {
+    "id": "01",
+    "name": "title",
+    "kind": "title",
+    "kicker": "Project walkthrough",
+    "title": "My Awesome Project",
+    "subtitle": "A 90-second narrated tour",
+    "narration": "Welcome. This is a ninety second tour of my awesome project — what it does, how it's built, and why it matters."
+  },
+  {
+    "id": "02",
+    "name": "architecture",
+    "kind": "diagram",
+    "kicker": "How it works",
+    "title": "Architecture",
+    "nodes": [
+      { "label": "User request" },
+      { "label": "Router", "sub": "decides where it goes", "accent": true },
+      { "row": [
+        { "label": "Service A", "sub": "does X" },
+        { "label": "Service B", "sub": "does Y" },
+        { "label": "Service C", "sub": "does Z" }
+      ]}
+    ],
+    "note": "Each service is independently deployable",
+    "narration": "At a high level, a request hits the router, which dispatches to one of three independently deployable services."
+  },
+  {
+    "id": "03",
+    "name": "code",
+    "kind": "code",
+    "kicker": "Implementation",
+    "title": "The core routing logic",
+    "subtitle": "router.py — one decision, one dispatch",
+    "code": "# classify the request, then dispatch\ndecision = classify(request)        # -> {target, confidence}\nif decision.confidence < 0.6:\n    return ask_for_clarification()  # never guess\nreturn SERVICES[decision.target].handle(request)",
+    "narration": "The core is small: classify the request, and if confidence is low, ask instead of guessing. Otherwise dispatch to the chosen service."
+  },
+  {
+    "id": "04",
+    "name": "features",
+    "kind": "bullets",
+    "kicker": "Highlights",
+    "title": "What it does",
+    "bullets": [
+      "Fast — sub-100ms median latency",
+      "Resilient — graceful fallback on every error path",
+      "Observable — structured traces on every request",
+      "Tested — full coverage of the critical paths"
+    ],
+    "narration": "It's fast, resilient, observable, and well tested — the four things I cared about most."
+  },
+  {
+    "id": "05",
+    "name": "table",
+    "kind": "table",
+    "kicker": "At a glance",
+    "title": "Requirements → implementation",
+    "rows": [
+      ["Routing", "<code>router.py</code> — confidence-gated dispatch"],
+      ["Services", "<code>services/*.py</code> — one module each"],
+      ["Observability", "<code>tracing.py</code> — structured spans"],
+      ["Tests", "<code>tests/</code> — critical paths covered"]
+    ],
+    "narration": "Every requirement maps cleanly to a file: routing, the services, observability, and the tests."
+  },
+  {
+    "id": "06",
+    "name": "closing",
+    "kind": "bullets",
+    "kicker": "Wrap-up",
+    "title": "Thanks for watching",
+    "bullets": [
+      "Repo: github.com/you/your-project",
+      "Runnable demo + tests included",
+      "Questions welcome"
+    ],
+    "narration": "That's the tour. The repo has a runnable demo and tests. Thanks for watching."
+  }
+]
