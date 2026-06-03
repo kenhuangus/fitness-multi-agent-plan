@@ -91,7 +91,7 @@ python app_cli.py --demo
 # Interactive REPL (persistent thread → multi-turn memory):
 python app_cli.py
 
-# Web view:
+# Web view (chat UI; every reply has an expandable decision trace — see below):
 streamlit run app_web.py
 
 # Tests:
@@ -102,17 +102,36 @@ Routing decisions and tool calls are logged as JSON to **stderr**; the conversat
 goes to **stdout**. Redirect stderr to a file to keep the chat clean:
 `python app_cli.py --demo 2>trace.jsonl`.
 
+### In-UI decision trace (how the routing decision is made)
+
+Every assistant reply in the web view has an expandable **"🔍 Decision trace"** panel that
+shows, without leaving the app, exactly how the turn was handled:
+
+1. **`RouterDecision`** (the LLM structured output) — the chosen route, a confidence bar against
+   the 0.6 threshold, and the model's reasoning.
+2. **LangGraph path** — `START → router → <ROUTE> → … → END` (incl. the `agent`/`tools` hops for
+   the tool-calling generator).
+3. **Tool calls** — each Pydantic-validated `search_exercises` / `build_workout` / fuzzy-match call.
+4. **Pydantic structured outputs** — the logger's `ParsedLog` (parsed sets/reps/weight/unit) and
+   the final `LogEntry` JSON.
+5. A link to the **full call-tree trace in Langfuse**.
+
+This is powered by an in-process event sink (`observability.capture()`), the same `log_event`
+stream that feeds the JSON logs and Langfuse — so the UI panel and the production trace show the
+same data.
+
 ---
 
 ## Demo video & screenshots
 
-- **[`demo/walkthrough.mp4`](demo/walkthrough.mp4)** — a 3:39 narrated walkthrough (Deepgram
-  TTS + ffmpeg) covering the whole system, the architecture, how each requirement is met, and
-  the Langfuse observability. Rebuild it with `python ops/make_slides.py` → screenshot slides →
+- **[`demo/walkthrough.mp4`](demo/walkthrough.mp4)** — a ~7-minute narrated walkthrough (Deepgram
+  TTS + ffmpeg) covering the whole system, the architecture with code, how each requirement is
+  met, the **in-UI decision trace**, and the Langfuse observability. Rebuild it with
+  `python ops/make_slides.py` → screenshot slides →
   `python <skill>/gen_tts_deepgram.py demo/scenes.json demo/audio` → `build_demo.sh`.
 - **[`media/screens/`](media/screens/)** — screenshots of every screen: the CLI, each web route
-  (coach / generate / log / clarify), the injury + multi-turn-memory exchange, and the Langfuse
-  trace list + trace detail.
+  (coach / generate / log / clarify), the injury + multi-turn-memory exchange, the Langfuse
+  trace list + trace detail, and the in-UI decision-trace panels (routing + tool-calling).
 - **[`transcript.md`](transcript.md)** — a text proof-of-run of every route + stretch feature.
 - **[`skills/narrated-demo/`](skills/narrated-demo/)** — the reusable, self-contained skill that
   produced the walkthrough: a `scenes.json` → styled slides + Deepgram TTS + ffmpeg montage

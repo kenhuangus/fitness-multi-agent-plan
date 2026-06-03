@@ -1,0 +1,10 @@
+# Disable the source-file watcher: it walks every imported module to find local
+# files to hot-reload, which is slow (and noisy) when large unrelated packages
+# like transformers/torch happen to be installed in the same environment. A demo
+# app doesn't need hot-reload; this keeps startup fast and the logs clean.
+[server]
+fileWatcherType = "none"
+headless = true
+
+[browser]
+gatherUsageStats = false

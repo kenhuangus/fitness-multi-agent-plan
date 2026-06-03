@@ -148,6 +148,24 @@
   },
   {
     "id": "17",
+    "name": "trace-routing",
+    "kind": "screen",
+    "title": "Decision trace, inline in the UI — routing + Pydantic",
+    "image": "media/screens/10-web-trace-log.png",
+    "caption": "Every turn: RouterDecision → LangGraph path → Pydantic ParsedLog + LogEntry",
+    "narration": "And you don't have to leave the app to see how a decision was made. Every turn has an inline decision trace. For a logged set, it shows the Pydantic router decision — route, confidence, and reasoning — the LangGraph path from start through the workout log node, the tool calls, and the structured Pydantic outputs: the parsed fields and the final log entry."
+  },
+  {
+    "id": "18",
+    "name": "trace-generate",
+    "kind": "screen",
+    "title": "Decision trace — the tool-calling flow, transparent",
+    "image": "media/screens/11-web-trace-generate.png",
+    "caption": "router → WORKOUT_GENERATE → agent → tools — every validated tool call shown",
+    "narration": "For a generated workout, the same panel exposes the tool calling flow: the path runs through the agent and tools nodes, and you can read every Pydantic validated tool call — the search exercises queries and the build workout call — right next to the result. The decision logic and the structured data are fully transparent in the U I."
+  },
+  {
+    "id": "19",
     "name": "reqmap",
     "kind": "reqmap",
     "title": "Every requirement → its implementation",
@@ -164,7 +182,7 @@
     "narration": "To recap how every requirement maps to code: the typed state graph hub in hub dot pie and state dot pie; sub agents as separate compiled graphs; Pydantic tool schemas with documented fields; structured output routing with the confidence guard; the search and build tools driving a React agent; the parse and fuzzy logger; and graceful resilience in the tools. All of it backed by thirteen passing tests across routing, resilience, and the stretch features."
   },
   {
-    "id": "18",
+    "id": "20",
     "name": "decisions",
     "kind": "bullets",
     "title": "Key design decisions",
@@ -178,7 +196,7 @@
     "narration": "Two decisions worth emphasizing. The low confidence guard means the system asks rather than misroutes. And resilient tools mean empty searches and invalid I Ds return structured payloads, never exceptions — so the agent recovers and never hallucinates exercises."
   },
   {
-    "id": "19",
+    "id": "21",
     "name": "closing",
     "kind": "bullets",
     "title": "All five stretch goals — implemented",

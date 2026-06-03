@@ -7,17 +7,43 @@ to any log aggregator.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import sys
 import time
 from contextlib import contextmanager
 from typing import Any
 
+# In-process sink: when set (via capture()), every log_event is ALSO appended
+# here so a single turn's decision flow + tool calls can be surfaced in a UI.
+_sink: contextvars.ContextVar = contextvars.ContextVar("obs_sink", default=None)
+
+
+@contextmanager
+def capture():
+    """Collect every log_event emitted in this block into a list (in addition to
+    the normal stderr JSON logging). Used by the web UI to show the decision
+    trace for each turn.
+
+        with capture() as events:
+            hub.invoke(...)
+        # events == [{"event": "route_decision", ...}, {"event": "tool_call", ...}]
+    """
+    events: list[dict] = []
+    token = _sink.set(events)
+    try:
+        yield events
+    finally:
+        _sink.reset(token)
+
 
 def log_event(kind: str, **fields: Any) -> None:
     """Emit one structured JSON log line. `kind` is the event type, e.g.
     'route_decision', 'tool_call', 'turn'."""
     record = {"event": kind, **fields}
+    sink = _sink.get()
+    if sink is not None:
+        sink.append(record)
     try:
         line = json.dumps(record, default=str)
     except (TypeError, ValueError):

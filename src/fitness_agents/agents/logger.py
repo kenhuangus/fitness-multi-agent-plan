@@ -42,6 +42,8 @@ def _parse_node(state: _LogState) -> dict:
     except Exception as exc:  # noqa: BLE001 - resilience
         log_event("logger_parse_error", error=repr(exc))
         parsed = ParsedLog(exercise_name_raw=user_input)
+    # Surface the Pydantic-parsed fields so the UI can show the structured extraction.
+    log_event("parsed_log", **parsed.model_dump())
     return {"parsed": parsed}
 
 
@@ -74,6 +76,8 @@ def _match_node(state: _LogState) -> dict:
     )
 
     data_json = entry.model_dump()
+    # Surface the final structured entry so the UI trace can show the Pydantic output.
+    log_event("structured_log", **data_json)
     if entry.matched_exercise_name:
         text = (
             f"Logged: {entry.sets or '?'}x{entry.reps or '?'} "
